@@ -3,6 +3,8 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    expose:
+      - "8080"
     volumes:
       - bounty-data:/data
 volumes:

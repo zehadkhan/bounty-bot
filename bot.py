@@ -18,6 +18,7 @@ Telegram commands (only answered in your own chat):
   /p name        full details + apply checklist for one program
 """
 import hashlib, html, json, logging, os, sqlite3, threading, time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import requests
 
 # ---------- config ----------
@@ -380,8 +381,36 @@ def poll_updates():
             log.warning("getUpdates: %s", ex)
             time.sleep(5)
 
+# ---------- status page ----------
+STATUS_PORT = int(os.environ.get("STATUS_PORT", "8080"))
+
+class StatusHandler(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def do_GET(self):
+        at = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(last_check["at"])) if last_check["at"] else "not yet"
+        err = f"<p style='color:#c0392b'>⚠️ Last error: {e(last_check['error'])}</p>" if last_check["error"] else ""
+        body = f"""<!doctype html><meta charset="utf-8"><title>Bounty Watch</title>
+<body style="font-family:system-ui,sans-serif;max-width:640px;margin:40px auto;line-height:1.6;color:#222">
+<h1>🎯 Bounty Watch</h1>
+<p>Tracking <b>{last_check['count']:,}</b> programs</p>
+<p>Last check: {e(at)} &middot; every {INTERVAL_MIN} min</p>
+<p>Filters: paid only={ONLY_PAID} &middot; min payout={MIN_PAYOUT:,.0f} &middot; platforms={e(', '.join(sorted(PLATFORMS)))} &middot; keywords={e(', '.join(KEYWORDS) or 'none')}</p>
+{err}
+<p><small>Controlled via Telegram: /status /check /new /top /search /p</small></p>
+</body>"""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(body.encode())
+
+def serve_status():
+    ThreadingHTTPServer(("0.0.0.0", STATUS_PORT), StatusHandler).serve_forever()
+
 def main():
     threading.Thread(target=poll_updates, daemon=True).start()
+    threading.Thread(target=serve_status, daemon=True).start()
     if not CHAT_ID:
         log.warning("TELEGRAM_CHAT_ID not set. Send /start to your bot to get it.")
     while True:
