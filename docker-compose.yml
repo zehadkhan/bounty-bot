@@ -1,0 +1,9 @@
+services:
+  bounty-watch:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - bounty-data:/data
+volumes:
+  bounty-data:
